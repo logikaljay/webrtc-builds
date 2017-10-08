@@ -426,6 +426,8 @@ function compile() {
   # rtc::VideoSinkWants const&)'
   [ $ENABLE_ITERATOR_DEBUGGING = 0 ] && common_args+=" enable_iterator_debugging=false"
 
+  common_args+=' ffmpeg_branding="Chrome" proprietary_codecs=true'
+
   # Use clang or gcc to compile WebRTC.
   # The default compiler used by Chromium/WebRTC is clang, so there are frequent
   # bugs and incompatabilities with gcc, especially with newer versions >= 4.8.
@@ -474,12 +476,17 @@ function package() {
 
   pushd $outdir >/dev/null
 
+    echo $outdir
+    echo $PWD
+
+
     # Create directory structure
     mkdir -p $label/include $label/lib/$TARGET_CPU packages
     pushd src >/dev/null
 
       # Find and copy header files
       find webrtc -name *.h -exec $CP --parents '{}' $outdir/$label/include ';'
+      echo "COPIED HEADERS"
 
       # Find and copy dependencies
       # The following build dependencies were excluded: gflags, ffmpeg, openh264, openmax_dl, winsdk_samples, yasm
@@ -487,33 +494,50 @@ function package() {
         grep -E 'boringssl|expat/files|jsoncpp/source/json|libjpeg|libjpeg_turbo|libsrtp|libyuv|libvpx|opus|protobuf|usrsctp/usrsctpout/usrsctpout' | \
         grep -v /third_party | \
         xargs -I '{}' $CP --parents '{}' $outdir/$label/include
+
+      echo "COPIED DEPENDECY HEADERS"
+
     popd >/dev/null
 
     # Find and copy libraries
     configs="Debug Release"
     for cfg in $configs; do
+      mkdir -p $outdir/$label/lib/$TARGET_CPU/$cfg
+
       pushd src/out/$TARGET_CPU/$cfg >/dev/null
         if [ $COMBINE_LIBRARIES = 1 ]; then
+         # find . -name '*.so' -o -name '*.dll' -o -name '*.lib' -o -name '*.a' -o -name '*.jar' | \
+         #   grep -E 'webrtc_full' | \
+         #   xargs -I '{}' $CP '{}' $outdir/$label/lib/$TARGET_CPU/$cfg
+
           find . -name '*.so' -o -name '*.dll' -o -name '*.lib' -o -name '*.a' -o -name '*.jar' | \
-            grep -E 'webrtc_full' | \
-            xargs -I '{}' $CP '{}' $outdir/$label/lib/$TARGET_CPU/$cfg
+             grep -E 'webrtc_full' | \
+             xargs cp -t $outdir/$label/lib/$TARGET_CPU/$cfg/
+
+          echo "COPIED $cfg LIBRARIES"
         else
           find . -name '*.so' -o -name '*.dll' -o -name '*.lib' -o -name '*.a' -o -name '*.jar' | \
             grep -E 'webrtc\.|boringssl|protobuf|system_wrappers' | \
-            xargs -I '{}' $CP '{}' $outdir/$label/lib/$TARGET_CPU/$cfg
+            xargs cp -t $outdir/$label/lib/$TARGET_CPU/$cfg/
+
+            #xargs -I '{}' $CP '{}' $outdir/$label/lib/$TARGET_CPU/$cfg
+
+          echo "COPIED $cfg LIBRARIES"
         fi
       popd >/dev/null
     done
 
     # For linux, add pkgconfig files
-    if [ $platform = 'linux' ]; then
-      configs="Debug Release"
-      for cfg in $configs; do
-        mkdir -p $label/lib/$TARGET_CPU/$cfg/pkgconfig
-        CONFIG=$cfg envsubst '$CONFIG' < $resourcedir/pkgconfig/libwebrtc_full.pc.in > \
-          $label/lib/$TARGET_CPU/$cfg/pkgconfig/libwebrtc_full.pc
-      done
-    fi
+    #if [ $platform = 'linux' ]; then
+    #  configs="Debug Release"
+    #  for cfg in $configs; do
+    #    mkdir -p $label/lib/$TARGET_CPU/$cfg/pkgconfig
+    #    CONFIG=$cfg envsubst '$CONFIG' < $resourcedir/pkgconfig/libwebrtc_full.pc.in > \
+    #      $label/lib/$TARGET_CPU/$cfg/pkgconfig/libwebrtc_full.pc
+
+    #    echo "SETTING pkg-config FILES"
+    #  done
+    #fi
 
     # Archive up the package
     rm -f $OUTFILE
